@@ -99,11 +99,11 @@ class DependenciesManager {
 public:
     //Return true: do not lead to cyclic dependencies => add new vertex to graph.
     //Return false: the addition will lead to a cycle, leave graph intact.
-    bool TryAddNewVertex(Position vertex, std::vector<Position> parents);
+    bool TryAddNewVertex(Position vertex, const std::vector<Position>& parents);
 
     //Here, we are updating an already existing vertex in the graph.
     //Possible modification
-    bool TryUpdateVertex(Position vertex, std::vector<Position> parents);
+    bool TryUpdateVertex(Position vertex,const std::vector<Position>& parents);
 
     //Check if pos has a value in the cache.
     bool IsInCache(Position pos) const;
@@ -167,11 +167,6 @@ public:
     ImplValue GetValue() const override;
     std::string GetText() const override;
     std::vector<Position> GetReferencedCells() const override;
-    /*
-    std::vector<Position> GetReferencedCells() const override {
-        return formula_->GetReferencedCells();
-    }
-    */
 
 private:
     std::unique_ptr<FormulaInterface> formula_;
@@ -186,24 +181,16 @@ public:
     ~Cell();
 
     Cell(const SheetInterface& sheet, DependenciesManager& manager, Position pos);
-        /*
-        : sheet_(sheet)
-        , dependencies_manager_(manager)
-        , pos_(pos) {
-    }
-    */
 
     void Set(std::string text);
+
     void Clear();
 
     Value GetValue() const override;
     std::string GetText() const override;
     std::vector<Position> GetReferencedCells() const override;
-    /*
-    std::vector<Position> GetReferencedCells() const override {
-        return impl_->GetReferencedCells();
-    }
-    */
+
+    void CheckValidDependencies(const std::vector<Position>& parents) const;
 
 private:
     std::unique_ptr<Impl> impl_;

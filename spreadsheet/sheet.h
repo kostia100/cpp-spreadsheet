@@ -30,12 +30,16 @@ public:
 private:
 	// Можете дополнить ваш класс нужными полями и методами
     
-    //Check if the position is valid.
-    static bool ValidPosition(Position pos);
+
+    //Check if the position is valid and throw an exception otherwise.
+    static void CheckIfPositionIsValid(Position pos);
+
+    //Update the printable after deleting cell.
+    void UpdatePrintableZoneAfterClearingCell(Position pos);
 
     //Check if the formula does not lead to circular dependencies.
     //Invalidate cache if we update an already existing cell.
-    bool ValidDependencies(Position pos, std::string text);
+    //bool ValidDependencies(Position pos, std::string text);
 
     bool IsInGrid(Position pos) const;
     void AddRowsToGrid(int n);

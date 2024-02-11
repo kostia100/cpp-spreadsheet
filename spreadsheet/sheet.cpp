@@ -43,30 +43,15 @@ void Sheet::SetCellInGrid(Position pos, std::string text) {
 }
 
 
-bool Sheet::ValidPosition(Position pos) {
+void Sheet::CheckIfPositionIsValid(Position pos) {
     if (pos.row < 0 || pos.col < 0) {
-        return false;
+        throw InvalidPositionException("Invalid position of cell");
     }
-    if (pos.row >= Position::MAX_ROWS ||pos.col >= Position::MAX_COLS ) {
-        return false;
+    if (pos.row >= Position::MAX_ROWS || pos.col >= Position::MAX_COLS) {
+        throw InvalidPositionException("Invalid position of cell");
     }
-    return true;
 }
 
-bool Sheet::ValidDependencies(Position pos, std::string text) {
-    std::shared_ptr<Cell> cell_ptr = std::make_shared<Cell>(*this,this->dependencies_manager, pos);
-    cell_ptr->Set(text);
-    std::vector<Position> parents = cell_ptr->GetReferencedCells();
-    CellInterface* current_cell = GetCell(pos);
-    if (current_cell == nullptr) {
-        //this is a new cell, no invalidation possible
-        return dependencies_manager.TryAddNewVertex(pos, parents);
-    }
-    //here we are overwriting an already existing cell
-    //need to invalidate cash
-    return dependencies_manager.TryUpdateVertex(pos, parents);
-    //return dependencies_manager.TryAddNewVertex(pos, parents);
-}
 
 bool Sheet::IsInGrid(Position pos) const {
     if (pos.row < 0 || pos.col < 0) {
@@ -81,13 +66,7 @@ bool Sheet::IsInGrid(Position pos) const {
 }
 
 void Sheet::SetCell(Position pos, std::string text) {
-    if (!ValidPosition(pos)) {
-        throw InvalidPositionException("Invalid position of cell");
-    }
-    if (!ValidDependencies(pos,text)) {
-        throw CircularDependencyException("Circular dependency");
-    }
-
+    CheckIfPositionIsValid(pos);
 
     bool is_in_printable_zone = (pos.row < printable_size_.rows ) && (pos.col < printable_size_.cols);
     if(is_in_printable_zone) {
@@ -105,16 +84,24 @@ void Sheet::SetCell(Position pos, std::string text) {
         else {
             int missing_rows = pos.row - grid_rows + 1;
             int missing_columns = pos.col - grid_columns + 1;
-
+            bool update_rows = false;
+            bool update_cols = false;
             if (missing_rows > 0) {
                 AddRowsToGrid(missing_rows);
-                printable_size_.rows = pos.row + 1;
+                update_rows = true;
             }
             if (missing_columns > 0) {
                 AddColumsToGrid(missing_columns);
-                printable_size_.cols = pos.col + 1;
+                update_cols = true;
             }
             SetCellInGrid(pos, text);
+            
+            if (update_rows) {
+                printable_size_.rows = pos.row + 1;
+            }
+            if (update_cols) {
+                printable_size_.cols = pos.col + 1;
+            }
         }
     }
     SetDependentCells(pos);
@@ -133,9 +120,8 @@ void Sheet::SetDependentCells(Position pos) {
 }
 
 const CellInterface* Sheet::GetCell(Position pos) const {
-    if (!ValidPosition(pos)) {
-        throw InvalidPositionException("Invalid position of cell");
-    }
+    CheckIfPositionIsValid(pos);
+
     if (!IsInGrid(pos)) {
         return nullptr;
     }
@@ -147,9 +133,7 @@ const CellInterface* Sheet::GetCell(Position pos) const {
 }
 
 CellInterface* Sheet::GetCell(Position pos) {
-    if (!ValidPosition(pos)) {
-        throw InvalidPositionException("Invalid position of cell");
-    }
+    CheckIfPositionIsValid(pos);
 
     if (!IsInGrid(pos)) {
         return nullptr;
@@ -161,53 +145,56 @@ CellInterface* Sheet::GetCell(Position pos) {
 }
 
 void Sheet::ClearCell(Position pos) {
-    if (!ValidPosition(pos)) {
-        throw InvalidPositionException("Invalid position of cell");
-    }
+    CheckIfPositionIsValid(pos);
+ 
     if (!IsInGrid(pos)) {
         return;
     }
 
     if (pos.row < printable_size_.rows && pos.col < printable_size_.cols) {
         cells_[pos.row][pos.col] = nullptr;
-        //update size...
-        if (pos.row == printable_size_.rows -1 ) {
-            int current_row = printable_size_.rows - 1;
-            while (current_row >=0) {
-                
-                int full_cells = count_if(cells_[current_row].begin(), cells_[current_row].end(), [](auto cell_ptr) {
-                    return cell_ptr != nullptr;
-                    });
+        //update size
+        UpdatePrintableZoneAfterClearingCell(pos);
+    }
+}
 
-                if (full_cells >= 1) {
-                    printable_size_.rows = current_row + 1 ;
-                    break;
-                }
-                --current_row;
+void Sheet::UpdatePrintableZoneAfterClearingCell(Position pos) {
+    if (pos.row == printable_size_.rows - 1) {
+        int current_row = printable_size_.rows - 1;
+        while (current_row >= 0) {
+
+            int full_cells = count_if(cells_[current_row].begin(), cells_[current_row].end(), [](auto cell_ptr) {
+                return cell_ptr != nullptr;
+                });
+
+            if (full_cells >= 1) {
+                printable_size_.rows = current_row + 1;
+                break;
             }
-            if (current_row < 0) {
-                //all rows are empty
-                printable_size_.rows = 0;
-                printable_size_.cols = 0;
-                return;
-            }
+            --current_row;
         }
-        if (pos.col == printable_size_.cols -1) {
-            int current_col = printable_size_.cols - 1;
-            while (current_col >= 0) {
-                int full_cells = 0;
-                for (size_t r = 0; r < cells_.size() ; ++r) {
-                    if (cells_[r][current_col]!=nullptr) {
-                        ++full_cells;
-                        break;
-                    }
-                }
-                if (full_cells >= 1) {
-                    printable_size_.cols = current_col + 1;
+        if (current_row < 0) {
+            //all rows are empty
+            printable_size_.rows = 0;
+            printable_size_.cols = 0;
+            return;
+        }
+    }
+    if (pos.col == printable_size_.cols - 1) {
+        int current_col = printable_size_.cols - 1;
+        while (current_col >= 0) {
+            int full_cells = 0;
+            for (size_t r = 0; r < cells_.size(); ++r) {
+                if (cells_[r][current_col] != nullptr) {
+                    ++full_cells;
                     break;
                 }
-                --current_col;
             }
+            if (full_cells >= 1) {
+                printable_size_.cols = current_col + 1;
+                break;
+            }
+            --current_col;
         }
     }
 }

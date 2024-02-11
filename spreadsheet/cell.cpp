@@ -103,7 +103,7 @@ void Graph::TranverseGraphAndInvalidateCache(
 
 //Dependencies Manager
 
-bool DependenciesManager::TryAddNewVertex(Position vertex, std::vector<Position> parents) {
+bool DependenciesManager::TryAddNewVertex(Position vertex,const std::vector<Position>& parents) {
 	if (parents.size() == 0) {
 		//no-dependencies
 		return true;
@@ -123,7 +123,7 @@ bool DependenciesManager::TryAddNewVertex(Position vertex, std::vector<Position>
 	}
 }
 
-bool DependenciesManager::TryUpdateVertex(Position vertex, std::vector<Position> parents) {
+bool DependenciesManager::TryUpdateVertex(Position vertex, const std::vector<Position>& parents) {
 	Graph tmp_grap(dependencies_graph);
 	//get current parents
 	std::vector<Position> current_parents;
@@ -248,20 +248,44 @@ Cell::Cell(const SheetInterface& sheet, DependenciesManager& manager, Position p
 	, pos_(pos) {
 }
 
+
 void Cell::Set(std::string text) {
+	//1. Parse the formula.
+	std::unique_ptr<Impl> tmp_ptr;
 	if (text.size() == 0) {
-		impl_ = std::make_unique<EmptyImpl>();
+		tmp_ptr = std::make_unique<EmptyImpl>();
 	}
-	else if (text[0] != '=' || (text[0] == '=' && text.size() == 1) ) {
-		impl_ = std::make_unique<TextImpl>(text);
+	else if (text[0] != '=' || (text[0] == '=' && text.size() == 1)) {
+		tmp_ptr = std::make_unique<TextImpl>(text);
 	}
 	else {
-		impl_ = std::make_unique<FormulaImpl>(text,sheet_);
+		tmp_ptr = std::make_unique<FormulaImpl>(text, sheet_);
+	}
+	//2. Check if the dependencies in the formula are valid.
+	CheckValidDependencies(tmp_ptr->GetReferencedCells());
+	//3. Transfer ownership of formula to current object.
+	impl_ = std::move(tmp_ptr);
+}
+
+void Cell::CheckValidDependencies(const std::vector<Position>& parents) const {
+	const CellInterface* current_cell = sheet_.GetCell(pos_);
+	bool valid_dependencies;
+	if (current_cell == nullptr) {
+		//this is a new cell, no invalidation possible
+		valid_dependencies = dependencies_manager_.TryAddNewVertex(pos_, parents);
+	}
+	else {
+		//here we are overwriting an already existing cell
+		//need to invalidate cash
+		valid_dependencies = dependencies_manager_.TryUpdateVertex(pos_, parents);
+	}
+	if (!valid_dependencies) {
+		throw CircularDependencyException("Circular dependency");
 	}
 }
 
 void Cell::Clear() {
-	impl_ = std::make_unique<EmptyImpl>();
+	Set("");
 }
 
 
