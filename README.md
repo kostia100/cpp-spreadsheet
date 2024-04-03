@@ -1,2 +1,3 @@
 # cpp-spreadsheet
-Дипломный проект: Электронная таблица
+Diplom project: backend of an Excel-type table.
+
